@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QELVRA Tic Tac Toe</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    background:#0f0f0f;
+    color:white;
+    font-family:Arial,sans-serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding:20px;
+}
+
+h1{
+    color:#00ffcc;
+    margin-bottom:15px;
+    text-align:center;
+}
+
+.mode-select{
+    display:flex;
+    gap:10px;
+    margin-bottom:15px;
+}
+
+.mode-btn{
+    padding:10px 18px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:bold;
+    background:#1d1d1d;
+    color:white;
+}
+
+.mode-btn.active{
+    background:#00ffcc;
+    color:black;
+}
+
+.board{
+    display:grid;
+    grid-template-columns:repeat(3,110px);
+    gap:8px;
+}
+
+.cell{
+    width:110px;
+    height:110px;
+    background:#1d1d1d;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2.8rem;
+    cursor:pointer;
+    user-select:none;
+    transition:.2s;
+}
+
+.cell:hover{
+    background:#2b2b2b;
+}
+
+.win{
+    background:#00ffcc !important;
+    color:black;
+}
+
+.status{
+    margin-top:15px;
+    font-size:20px;
+    text-align:center;
+    min-height:28px;
+}
+
+.controls{
+    display:flex;
+    gap:10px;
+}
+
+button{
+    margin-top:15px;
+    padding:10px 25px;
+    border:none;
+    border-radius:8px;
+    background:#00ffcc;
+    color:black;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+button:hover{
+    opacity:.9;
+}
+
+.footer{
+    margin-top:20px;
+    color:#666;
+    font-size:14px;
+}
+
+@media(max-width:500px){
+
+    .board{
+        grid-template-columns:repeat(3,90px);
+    }
+
+    .cell{
+        width:90px;
+        height:90px;
+        font-size:2.2rem;
+    }
+}
+</style>
+</head>
+<body>
+
+<h1>QELVRA Tic Tac Toe</h1>
+
+<div class="mode-select">
+    <button class="mode-btn active" id="pvpBtn"
+        onclick="setMode('pvp')">
+        👥 2 Players
+    </button>
+
+    <button class="mode-btn" id="aiBtn"
+        onclick="setMode('ai')">
+        🤖 AI Mode
+    </button>
+</div>
+
+<div class="board" id="board"></div>
+
+<div class="status" id="status">
+    Player X's turn
+</div>
+
+<div class="controls">
+    <button onclick="resetGame()">Restart</button>
+</div>
+
+<div class="footer">
+    Powered by QELVRA
+</div>
+
+<script>
+
+let board = ["","","","","","","","",""];
+let currentPlayer = "X";
+let gameActive = true;
+let gameMode = "pvp";
+let winningCells = [];
+
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+
+let audioCtx;
+
+function initAudio(){
+    if(!audioCtx){
+        audioCtx =
+            new(window.AudioContext ||
+            window.webkitAudioContext)();
+    }
+
+    audioCtx.resume();
+}
+
+function playTone(freq,duration,volume=0.12){
+
+    if(!audioCtx) return;
+
+    const osc =
+        audioCtx.createOscillator();
+
+    const gain =
+        audioCtx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.value = freq;
+
+    gain.gain.value = volume;
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+
+    gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        audioCtx.currentTime + duration/1000
+    );
+
+    osc.stop(
+        audioCtx.currentTime + duration/1000
+    );
+}
+
+function clickSound(){
+    playTone(520,80,0.15);
+}
+
+function winSound(){
+    playTone(660,120,0.15);
+    setTimeout(()=>playTone(880,150,0.12),130);
+    setTimeout(()=>playTone(1100,180,0.10),300);
+}
+
+function drawSound(){
+    playTone(600,150,0.15);
+    setTimeout(()=>playTone(500,150,0.12),180);
+    setTimeout(()=>playTone(400,250,0.12),360);
+}
+
+const winPatterns = [
+    [0,1,2],
+    [3,4,5],
+    [6,7,8],
+    [0,3,6],
+    [1,4,7],
+    [2,5,8],
+    [0,4,8],
+    [2,4,6]
+];
+
+function setMode(mode){
+
+    gameMode = mode;
+
+    document
+    .getElementById("pvpBtn")
+    .classList.remove("active");
+
+    document
+    .getElementById("aiBtn")
+    .classList.remove("active");
+
+    if(mode === "pvp"){
+        document
+        .getElementById("pvpBtn")
+        .classList.add("active");
+    }else{
+        document
+        .getElementById("aiBtn")
+        .classList.add("active");
+    }
+
+    resetGame();
+}
+
+function drawBoard(){
+
+    boardEl.innerHTML = "";
+
+    board.forEach((value,index)=>{
+
+        const cell =
+            document.createElement("div");
+
+        cell.className = "cell";
+
+        if(winningCells.includes(index)){
+            cell.classList.add("win");
+        }
+
+        cell.textContent = value;
+
+        cell.addEventListener(
+            "click",
+            ()=>playMove(index)
+        );
+
+        boardEl.appendChild(cell);
+    });
+}
+
+function checkWinner(){
+
+    for(const pattern of winPatterns){
+
+        const [a,b,c] = pattern;
+
+        if(
+            board[a] &&
+            board[a] === board[b] &&
+            board[a] === board[c]
+        ){
+            winningCells = pattern;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function aiMove(){
+
+    if(!gameActive) return;
+
+    let empty = [];
+
+    board.forEach((cell,index)=>{
+        if(cell === ""){
+            empty.push(index);
+        }
+    });
+
+    if(empty.length === 0) return;
+
+    let move =
+        empty[Math.floor(
+            Math.random()*empty.length
+        )];
+
+    board[move] = "O";
+
+    clickSound();
+
+    if(checkWinner()){
+
+        statusEl.textContent =
+            "🤖 AI Wins!";
+
+        winSound();
+
+        gameActive = false;
+
+        drawBoard();
+        return;
+    }
+
+    if(!board.includes("")){
+
+        statusEl.textContent =
+            "🤝 It's a Draw!";
+
+        drawSound();
+
+        gameActive = false;
+
+        drawBoard();
+        return;
+    }
+
+    currentPlayer = "X";
+
+    statusEl.textContent =
+        "Player X's turn";
+
+    drawBoard();
+}
+
+function playMove(index){
+
+    initAudio();
+
+    if(!gameActive) return;
+
+    if(board[index] !== "") return;
+
+    board[index] = currentPlayer;
+
+    clickSound();
+
+    if(checkWinner()){
+
+        statusEl.textContent =
+            gameMode === "ai"
+            ? (currentPlayer === "X"
+                ? "🎉 You Win!"
+                : "🤖 AI Wins!")
+            : `🎉 Player ${currentPlayer} Wins!`;
+
+        winSound();
+
+        gameActive = false;
+
+        drawBoard();
+        return;
+    }
+
+    if(!board.includes("")){
+
+        statusEl.textContent =
+            "🤝 It's a Draw!";
+
+        drawSound();
+
+        gameActive = false;
+
+        drawBoard();
+        return;
+    }
+
+    currentPlayer =
+        currentPlayer === "X"
+        ? "O"
+        : "X";
+
+    drawBoard();
+
+    if(
+        gameMode === "ai" &&
+        currentPlayer === "O"
+    ){
+
+        statusEl.textContent =
+            "🤖 AI Thinking...";
+
+        setTimeout(aiMove,500);
+
+        return;
+    }
+
+    statusEl.textContent =
+        `Player ${currentPlayer}'s turn`;
+}
+
+function resetGame(){
+
+    board =
+    ["","","","","","","","",""];
+
+    winningCells = [];
+
+    currentPlayer = "X";
+
+    gameActive = true;
+
+    if(gameMode === "ai"){
+        statusEl.textContent =
+            "Player X's turn (vs AI)";
+    }else{
+        statusEl.textContent =
+            "Player X's turn";
+    }
+
+    drawBoard();
+}
+
+drawBoard();
+
+</script>
+
+</body>
+</html>
